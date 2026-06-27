@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 """
-Forensic EXIF Metadata & GPS Extractor
+ghostframe - Forensic Image Analysis & Remediation Toolkit
 Disclaimer: For educational and authorized administrative auditing purposes only.
 """
 
 import argparse
 import os
+import sys
 from PIL import Image, UnidentifiedImageError
 from PIL.ExifTags import GPSTAGS, TAGS
 
 BANNER = r"""
- _   _  _____ ______  _____ ______ __   __
+ _____              _   _           _                                                        
 
-| \ | ||  _  || ___ \|  _  ||  _  \\ \ / /
-|  \| || | | || |_/ /| | | || | | | \ V / 
-| . ` || | | || ___ \| | | || | | |  \ /  
-| |\  |\ \_/ /| |_/ /\ \_/ /| |/ /   | |  
-\_| \_/ \___/ \____/  \___/ |___/    \_/  
+|_   _|            | | | |         | |                                                       
+  | |  _ __ ___    | |_| |__   __ _| |_ _ __ ___   ___  _ __ __ _ _   _  ___ _ __             
+  | | | '_ ` _ \   | __| '_ \ / _` | __| '_ ` _ \ / _ \| '__/ _` | | | |/ _ \ '_ \            
+ _| |_| | | | | |  | |_| | | | (_| | |_| | | | | | (_) | | | (_| | |_| |  __/ | | |           
+ \___/|_| |_| |_|   \__|_| |_|\__,_|\__|_| |_| |_|\___/|_|  \__, |\__,_|\___|_| |_|           
+                                                             __/ |                           
+                                                            |___/                            
 """
 
 SUPPORTED_EXTENSIONS = ('.jpg', '.jpeg', '.tiff', '.tif')
@@ -49,16 +52,15 @@ def parse_gps_info(gps_dict):
     lon_ref = gps_data.get("GPSLongitudeRef")
 
     if all([lat, lat_ref, lon, lon_ref]):
-        # Handle unpacked sequences safely regardless of tuple variations
-        dec_lat = convert_to_decimal(lat[0], lat[1], lat[2], lat_ref)
-        dec_lon = convert_to_decimal(lon[0], lon[1], lon[2], lon_ref)
+        dec_lat = convert_to_decimal(lat, lat, lat, lat_ref)
+        dec_lon = convert_to_decimal(lon, lon, lon, lon_ref)
         if dec_lat is not None and dec_lon is not None:
             return f"https://google.com{dec_lat},{dec_lon}"
     return None
 
 
-def process_image(file_path, output_stream):
-    """Opens a target image path, parses EXIF frames, and logs metrics."""
+def extract_metadata(file_path, output_stream):
+    """Opens an image path, parses EXIF frames, and prints/logs metrics."""
     output_stream.write("\n" + "=" * 80 + "\n")
     output_stream.write(f" TARGET FILE: {os.path.abspath(file_path)}\n")
     output_stream.write("=" * 80 + "\n")
@@ -74,13 +76,12 @@ def process_image(file_path, output_stream):
             for tag_id, value in exif_data.items():
                 tag_name = TAGS.get(tag_id, tag_id)
                 if tag_name == "GPSInfo":
-                    gps_raw = value  # Defer parsing to ensure clear structural grouping
+                    gps_raw = value  
                 else:
                     output_stream.write(f"  {tag_name}: {value}\n")
 
             if gps_raw:
                 output_stream.write("\n  --- GPS Tracking Metrics ---\n")
-                # Print explicit items inside the nested dictionary
                 for k, v in gps_raw.items():
                     output_stream.write(f"    {GPSTAGS.get(k, k)}: {v}\n")
                 
@@ -96,11 +97,28 @@ def process_image(file_path, output_stream):
         output_stream.write(f"[-] OS System Exception reading target file descriptor: {e}\n")
 
 
+def strip_metadata(file_path):
+    """Opens an image and saves it again to wipe out all unrequested EXIF tables."""
+    try:
+        print(f"[*] Stripping: {os.path.basename(file_path)}... ", end="", flush=True)
+        with Image.open(file_path) as img:
+            # Safely handle image transparency layers converting to JPEG format structures
+            if img.mode in ("RGBA", "P") and file_path.lower().endswith(('.jpg', '.jpeg')):
+                img = img.convert("RGB")
+            
+            # Saving clean drops old unrequested EXIF records completely
+            img.save(file_path)
+        print("WIPED!")
+    except UnidentifiedImageError:
+        print("FAILED (Invalid image signature)")
+    except (IOError, PermissionError) as e:
+        print(f"FAILED (OS Error: {e})")
+
+
 def main():
     print(BANNER)
     
-    # Setup robust Argument Parser flag bindings
-    parser = argparse.ArgumentParser(description="Forensic Image EXIF & Coordinates Tracking Analysis Utility.")
+    parser = argparse.ArgumentParser(description="Forensic Image EXIF Tool - Analysis & Remediation Suite.")
     parser.add_argument("-p", "--path", default="images", help="Target filename or workspace folder path (Default: ./images)")
     args = parser.parse_args()
 
@@ -110,18 +128,17 @@ def main():
         print(f"[-] Execution Halt: The specified path '{target_path}' does not exist on this environment.")
         return
 
-    # Prompt delivery layout configuration choice
-    print("Select Analysis Delivery Target:")
-    print("  1 - Text File Export (exif_analysis.txt)")
-    print("  2 - Standard Interactive Terminal Screen Output")
-    
+    # Phase 1: Operational Core Mode Decision Mapping
+    print("Choose Application Function:")
+    print("  1 - [Read] Extract Embedded EXIF Metadata & Geolocation")
+    print("  2 - [Wipe] Permanent Metadata Removal (Destructive)")
     while True:
-        choice = input("Select Execution Mode (1 or 2): ").strip()
-        if choice in ('1', '2'):
+        mode_choice = input("Select Action (1 or 2): ").strip()
+        if mode_choice in ('1', '2'):
             break
         print("[!] Input validation fault. Enter 1 or 2.")
 
-    # Determine runtime files distribution matrix
+    # Phase 2: Structural File Gathering Pipeline
     files_to_process = []
     if os.path.isfile(target_path):
         if target_path.lower().endswith(SUPPORTED_EXTENSIONS):
@@ -136,19 +153,40 @@ def main():
         print(f"[-] Execution End: No compatible target images found matching format scopes: {SUPPORTED_EXTENSIONS}")
         return
 
-    print(f"\n[+] Processing Sequence Initiated over {len(files_to_process)} discovered files...")
+    print(f"\n[+] Discovered {len(files_to_process)} file(s). Starting execution thread...")
 
-    # Redirect and evaluate runtime streams safely
-    if choice == '1':
-        export_filename = "exif_analysis.txt"
-        with open(export_filename, "w", encoding="utf-8") as out_file:
+    # Phase 3: Action Dispatch Matrix Route Handling
+    if mode_choice == '1':
+        print("\nSelect Analysis Delivery Target:")
+        print("  1 - Text File Export (exif_analysis.txt)")
+        print("  2 - Standard Interactive Terminal Screen Output")
+        while True:
+            delivery_choice = input("Select Output Target (1 or 2): ").strip()
+            if delivery_choice in ('1', '2'):
+                break
+            print("[!] Input validation fault. Enter 1 or 2.")
+
+        if delivery_choice == '1':
+            export_filename = "exif_analysis.txt"
+            with open(export_filename, "w", encoding="utf-8") as out_file:
+                for file in files_to_process:
+                    extract_metadata(file, out_file)
+            print(f"\n[✓] Metadata analysis exported to: {export_filename}")
+        else:
             for file in files_to_process:
-                process_image(file, out_file)
-        print(f"[✓] Structural processing finalized. Report available at: {export_filename}")
-    else:
+                extract_metadata(file, sys.stdout)
+            print("\n[✓] Interactive data mapping pipeline completed.")
+
+    elif mode_choice == '2':
+        confirm = input("\n⚠️ WARNING: This operation overwrites your files to permanently clear metadata. Continue? (y/N): ").strip().lower()
+        if confirm != 'y':
+            print("[-] Operation aborted safely.")
+            return
+        
+        print()
         for file in files_to_process:
-            process_image(file, sys.stdout)
-        print("\n[✓] Interactive data pipeline finalized successfully.")
+            strip_metadata(file)
+        print("\n[✓] All target media metadata arrays successfully remediated.")
 
 
 if __name__ == "__main__":
