@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: ghostframe
+Version: 1.0.0
+Summary: Terminal forensic image metadata tool
+License-File: LICENSE
+Requires-Dist: pillow
+Requires-Dist: rich
+Dynamic: license-file

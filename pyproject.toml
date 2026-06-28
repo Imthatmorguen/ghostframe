@@ -1,0 +1,11 @@
+[project]
+name = "ghostframe"
+version = "1.0.0"
+description = "Terminal forensic image metadata tool"
+dependencies = ["pillow", "rich"]
+
+[project.scripts]
+ghostframe = "ghostframe.main:main"
+
+[tool.setuptools]
+packages = ["ghostframe"]

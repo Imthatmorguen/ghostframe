@@ -1,0 +1,15 @@
+LICENSE
+README.md
+pyproject.toml
+ghostframe/__init__.py
+ghostframe/__main__.py
+ghostframe/cli.py
+ghostframe/config.py
+ghostframe/i18n.py
+ghostframe/main.py
+ghostframe.egg-info/PKG-INFO
+ghostframe.egg-info/SOURCES.txt
+ghostframe.egg-info/dependency_links.txt
+ghostframe.egg-info/entry_points.txt
+ghostframe.egg-info/requires.txt
+ghostframe.egg-info/top_level.txt
