@@ -11,18 +11,16 @@ from PIL import Image, UnidentifiedImageError
 from PIL.ExifTags import GPSTAGS, TAGS
 
 BANNER = r"""
- _____              _   _           _                                                        
+        _               _   __                                 
+   __ _| |__   ___  ___| |_/ _|_ __ __ _ _ __ ___   ___        
+  / _` | '_ \ / _ \/ __| __| |_| '__/ _` | '_ ` _ \ / _ \       
 
-|_   _|            | | | |         | |                                                       
-  | |  _ __ ___    | |_| |__   __ _| |_ _ __ ___   ___  _ __ __ _ _   _  ___ _ __             
-  | | | '_ ` _ \   | __| '_ \ / _` | __| '_ ` _ \ / _ \| '__/ _` | | | |/ _ \ '_ \            
- _| |_| | | | | |  | |_| | | | (_| | |_| | | | | | (_) | | | (_| | |_| |  __/ | | |           
- \___/|_| |_| |_|   \__|_| |_|\__,_|\__|_| |_| |_|\___/|_|  \__, |\__,_|\___|_| |_|           
-                                                             __/ |                           
-                                                            |___/                            
+ | (_| | | | | (_) \__ \ |_|  _| | | (_| | | | | | |  __/       
+  \__, |_| |_|\___/|___/\__|_| |_|  \__,_|_| |_| |_|\___|  v1.2.0
+  |___/                                                        
 """
 
-SUPPORTED_EXTENSIONS = ('.jpg', '.jpeg', '.tiff', '.tif')
+SUPPORTED_EXTENSIONS = ('.jpg', '.jpeg', '.tiff', '.tif', '.png', '.webp')
 
 
 def convert_to_decimal(degrees, minutes, seconds, reference):
@@ -60,7 +58,7 @@ def parse_gps_info(gps_dict):
 
 
 def extract_metadata(file_path, output_stream):
-    """Opens an image path, parses EXIF frames, and prints/logs metrics."""
+    """Opens an image path, parses metadata tags, and prints/logs metrics."""
     output_stream.write("\n" + "=" * 80 + "\n")
     output_stream.write(f" TARGET FILE: {os.path.abspath(file_path)}\n")
     output_stream.write("=" * 80 + "\n")
@@ -68,17 +66,25 @@ def extract_metadata(file_path, output_stream):
     try:
         with Image.open(file_path) as img:
             exif_data = img.getexif()
-            if not exif_data:
-                output_stream.write("[*] This image file contains no embedded EXIF metadata.\n")
+            info_data = img.info
+
+            if not exif_data and not info_data:
+                output_stream.write("[*] This image file contains no embedded metadata structures.\n")
                 return
 
             gps_raw = None
-            for tag_id, value in exif_data.items():
-                tag_name = TAGS.get(tag_id, tag_id)
-                if tag_name == "GPSInfo":
-                    gps_raw = value  
-                else:
-                    output_stream.write(f"  {tag_name}: {value}\n")
+            if exif_data:
+                for tag_id, value in exif_data.items():
+                    tag_name = TAGS.get(tag_id, tag_id)
+                    if tag_name == "GPSInfo":
+                        gps_raw = value  
+                    else:
+                        output_stream.write(f"  {tag_name}: {value}\n")
+
+            if info_data:
+                for key, val in info_data.items():
+                    if key not in ('exif', 'icc_profile'):
+                        output_stream.write(f"  {key}: {val}\n")
 
             if gps_raw:
                 output_stream.write("\n  --- GPS Tracking Metrics ---\n")
@@ -98,16 +104,13 @@ def extract_metadata(file_path, output_stream):
 
 
 def strip_metadata(file_path):
-    """Opens an image and saves it again to wipe out all unrequested EXIF tables."""
+    """Opens an image and saves it again to completely clear metadata frames."""
     try:
         print(f"[*] Stripping: {os.path.basename(file_path)}... ", end="", flush=True)
         with Image.open(file_path) as img:
-            # Safely handle image transparency layers converting to JPEG format structures
-            if img.mode in ("RGBA", "P") and file_path.lower().endswith(('.jpg', '.jpeg')):
+            if img.mode in ("RGBA", "P", "LA") and file_path.lower().endswith(('.jpg', '.jpeg')):
                 img = img.convert("RGB")
-            
-            # Saving clean drops old unrequested EXIF records completely
-            img.save(file_path)
+            img.save(file_path, exif=b"")
         print("WIPED!")
     except UnidentifiedImageError:
         print("FAILED (Invalid image signature)")
@@ -119,18 +122,18 @@ def main():
     print(BANNER)
     
     parser = argparse.ArgumentParser(description="Forensic Image EXIF Tool - Analysis & Remediation Suite.")
-    parser.add_argument("-p", "--path", default="images", help="Target filename or workspace folder path (Default: ./images)")
+    parser.add_argument("positional_path", nargs="?", default=None, help="Target image path passed directly without flags")
+    parser.add_argument("-p", "--path", default=None, help="Target filename or workspace folder path")
     args = parser.parse_args()
 
-    target_path = args.path
+    target_path = args.path or args.positional_path or "images"
 
     if not os.path.exists(target_path):
         print(f"[-] Execution Halt: The specified path '{target_path}' does not exist on this environment.")
         return
 
-    # Phase 1: Operational Core Mode Decision Mapping
     print("Choose Application Function:")
-    print("  1 - [Read] Extract Embedded EXIF Metadata & Geolocation")
+    print("  1 - [Read] Extract Embedded Metadata & Geolocation")
     print("  2 - [Wipe] Permanent Metadata Removal (Destructive)")
     while True:
         mode_choice = input("Select Action (1 or 2): ").strip()
@@ -138,7 +141,6 @@ def main():
             break
         print("[!] Input validation fault. Enter 1 or 2.")
 
-    # Phase 2: Structural File Gathering Pipeline
     files_to_process = []
     if os.path.isfile(target_path):
         if target_path.lower().endswith(SUPPORTED_EXTENSIONS):
@@ -155,7 +157,6 @@ def main():
 
     print(f"\n[+] Discovered {len(files_to_process)} file(s). Starting execution thread...")
 
-    # Phase 3: Action Dispatch Matrix Route Handling
     if mode_choice == '1':
         print("\nSelect Analysis Delivery Target:")
         print("  1 - Text File Export (exif_analysis.txt)")
