@@ -15,7 +15,7 @@ BANNER = r"""
    __ _| |__   ___  ___| |_/ _|_ __ __ _ _ __ ___   ___        
   / _` | '_ \ / _ \/ __| __| |_| '__/ _` | '_ ` _ \ / _ \       
  | (_| | | | | (_) \__ \ |_|  _| | | (_| | | | | | |  __/       
-  \__, |_| |_|\___/|___/\__|_| |_|  \__,_|_| |_| |_|\___|  v1.2.0
+  \__, |_| |_|\___/|___/\__|_| |_|  \__,_|_| |_| |_|\___|  v1.2.1
   |___/                                                        
 """
 
@@ -38,6 +38,9 @@ def convert_to_decimal(degrees, minutes, seconds, reference):
 
 def parse_gps_info(gps_dict):
     """Extracts, standardizes, and evaluates usable coordinate dictionaries."""
+    if not isinstance(gps_dict, dict):
+        return None
+        
     gps_data = {}
     for key, value in gps_dict.items():
         tag_name = GPSTAGS.get(key, key)
@@ -85,16 +88,20 @@ def extract_metadata(file_path, output_stream):
                     if key not in ('exif', 'icc_profile'):
                         output_stream.write(f"  {key}: {val}\n")
 
+            # Added safety typecheck validation to stop crashing on malformed int pointers
             if gps_raw:
-                output_stream.write("\n  --- GPS Tracking Metrics ---\n")
-                for k, v in gps_raw.items():
-                    output_stream.write(f"    {GPSTAGS.get(k, k)}: {v}\n")
-                
-                maps_url = parse_gps_info(gps_raw)
-                if maps_url:
-                    output_stream.write(f"\n  [+] Geolocation Hyperlink Identified:\n    {maps_url}\n")
+                if isinstance(gps_raw, dict):
+                    output_stream.write("\n  --- GPS Tracking Metrics ---\n")
+                    for k, v in gps_raw.items():
+                        output_stream.write(f"    {GPSTAGS.get(k, k)}: {v}\n")
+                    
+                    maps_url = parse_gps_info(gps_raw)
+                    if maps_url:
+                        output_stream.write(f"\n  [+] Geolocation Hyperlink Identified:\n    {maps_url}\n")
+                    else:
+                        output_stream.write("\n  [-] Incomplete coordinate matrix. Unable to build map URL.\n")
                 else:
-                    output_stream.write("\n  [-] Incomplete coordinate matrix. Unable to build map URL.\n")
+                    output_stream.write("\n  [*] GPSInfo tag exists but contains no parseable data dictionary.\n")
 
     except UnidentifiedImageError:
         output_stream.write("[-] Processing Exception: File signature invalid or unreadable graphic structure.\n")
